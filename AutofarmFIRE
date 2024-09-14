@@ -1,0 +1,240 @@
+local executorOn = false
+local dragging = false
+local dragStart
+local startPos
+local tweening = false  -- Track whether the player is being tweened
+
+-- Create the ScreenGui and Button (works on all executors)
+local Player = game.Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleButton = Instance.new("TextButton")
+local PlayerListButton = Instance.new("TextButton")
+local ListBox = Instance.new("Frame")
+local ScrollingFrame = Instance.new("ScrollingFrame")
+local UIListLayout = Instance.new("UIListLayout")
+local UserButtons = {}  -- Table to hold player buttons
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+-- Parent the ScreenGui to CoreGui so it persists even after death
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false  -- Ensure the GUI stays after respawn
+
+-- Configure the ToggleButton's appearance
+ToggleButton.Parent = ScreenGui
+ToggleButton.Size = UDim2.new(0.15, 0, 0.1, 0)  -- 15% width, 10% height
+ToggleButton.Position = UDim2.new(0.425, 0, 0.45, 0)  -- Center the button
+ToggleButton.Text = "Turn On"  -- Initial text
+ToggleButton.BackgroundColor3 = Color3.fromRGB(85, 170, 255)  -- Button color
+ToggleButton.TextSize = 20
+ToggleButton.TextScaled = true  -- Enable text scaling
+ToggleButton.TextWrapped = true  -- Enable text wrapping
+
+-- Configure the PlayerListButton appearance
+PlayerListButton.Parent = ScreenGui
+PlayerListButton.Size = UDim2.new(0.15, 0, 0.1, 0)  -- Same width as ToggleButton, 10% height
+PlayerListButton.Position = UDim2.new(0.425, 0, 0.55, 0)  -- Below the ToggleButton
+PlayerListButton.Text = "Show Players"  -- Button text
+PlayerListButton.BackgroundColor3 = Color3.fromRGB(170, 255, 85)  -- Different color
+PlayerListButton.TextSize = 20
+PlayerListButton.TextScaled = true  -- Enable text scaling
+PlayerListButton.TextWrapped = true  -- Enable text wrapping
+
+-- Configure the ListBox appearance
+ListBox.Parent = ScreenGui
+ListBox.Size = UDim2.new(0.15, 0, 0.4, 0)  -- 15% width, 40% height
+ListBox.Position = UDim2.new(0.425, 0, 0.55, 0)  -- Below the button
+ListBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)  -- White background
+ListBox.Visible = false  -- Initially hidden
+
+-- Configure the Scrolling Frame inside the ListBox
+ScrollingFrame.Parent = ListBox
+ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)  -- Fill the ListBox
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.ScrollBarThickness = 8
+
+-- Configure the layout of the list items
+UIListLayout.Parent = ScrollingFrame
+UIListLayout.Padding = UDim.new(0, 3)  -- Padding between items
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder  -- Correct SortOrder
+
+-- Store selected player
+local selectedPlayer = nil
+
+-- Function to update the list of players
+local function updatePlayerList()
+    -- Clear previous user buttons
+    for _, button in ipairs(UserButtons) do
+        button:Destroy()
+    end
+    UserButtons = {}
+
+    -- Add each player to the list
+    for _, player in ipairs(game.Players:GetPlayers()) do
+        local PlayerButton = Instance.new("TextButton")
+        PlayerButton.Parent = ScrollingFrame
+        PlayerButton.Size = UDim2.new(1, 0, 0, 25)  -- Full width, 25 pixels height
+        PlayerButton.Text = player.Name
+        PlayerButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)  -- Light gray
+        PlayerButton.TextSize = 14  -- Smaller text size
+        PlayerButton.TextScaled = true  -- Enable text scaling
+        PlayerButton.TextWrapped = true  -- Enable text wrapping
+
+        -- Add button to the list
+        table.insert(UserButtons, PlayerButton)
+
+        -- Handle button click
+        PlayerButton.MouseButton1Click:Connect(function()
+            selectedPlayer = player
+            -- Set the PlayerListButton text to the selected player's name
+            PlayerListButton.Text = "Selected: " .. player.Name
+            -- Hide the list
+            ListBox.Visible = false
+        end)
+    end
+end
+
+-- Function to teleport the player to specific coordinates
+local function teleportToCoordinates(position)
+    if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+        Player.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+    end
+end
+
+-- Function to smoothly follow the selected player using TweenService
+local function followPlayerWithTween(targetPlayer)
+    local followSpeed = 75  -- Adjust speed here
+    tweening = true  -- Start tweening
+
+    local function onCharacterDied()
+        tweening = false  -- Stop tweening
+    end
+
+    local character = Player.Character or Player.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    -- Connect to the humanoid's death event
+    local connection
+    connection = humanoid.Died:Connect(function()
+        tweening = false
+        connection:Disconnect()  -- Disconnect event listener when no longer needed
+    end)
+
+    coroutine.wrap(function()
+        while tweening and selectedPlayer and selectedPlayer.Character and Player.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") do
+            local targetRootPart = selectedPlayer.Character.HumanoidRootPart
+            local targetPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 5  -- Stay in front of the player
+
+            local humanoidRootPart = Player.Character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                -- Create a tween to move smoothly in front of the player
+                local tweenInfo = TweenInfo.new(
+                    (humanoidRootPart.Position - targetPosition).Magnitude / followSpeed,  -- Duration based on distance and speed
+                    Enum.EasingStyle.Linear
+                )
+                local goal = {CFrame = CFrame.new(targetPosition)}
+                local tween = TweenService:Create(humanoidRootPart, tweenInfo, goal)
+                tween:Play()
+
+                tween.Completed:Wait()  -- Wait for the tween to complete
+            end
+
+            RunService.RenderStepped:Wait()  -- Use RenderStepped for more precise timing
+        end
+    end)()
+end
+
+-- Function to teleport the player to the selected player
+local function teleportToPlayer(targetPlayer)
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local targetRootPart = targetPlayer.Character.HumanoidRootPart
+        local teleportPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 5 -- Teleport in front of the player
+        teleportToCoordinates(teleportPosition)
+
+        -- Immediately start following the player with tween after teleporting
+        followPlayerWithTween(targetPlayer)
+    end
+end
+
+-- Function to handle toggling the executor
+local function toggleExecutor()
+    executorOn = not executorOn  -- Toggle the state
+
+    if executorOn then
+        ToggleButton.Text = "Turn Off"  -- Update button text
+        print("Executor is ON")
+
+        coroutine.wrap(function()
+            while executorOn do
+                -- Teleport to the specific coordinates continuously for 24 seconds
+                local teleportStartTime = tick()
+                local teleportPosition = Vector3.new(236.819855, 28.944473, 84.476768)
+
+                -- Teleport continuously for 24 seconds
+                while executorOn and tick() - teleportStartTime < 24 do
+                    teleportToCoordinates(teleportPosition)
+                    RunService.RenderStepped:Wait()  -- Use RenderStepped for more precise timing
+                end
+
+                -- After 24 seconds, teleport to the selected player and start following
+                if selectedPlayer then
+                    teleportToPlayer(selectedPlayer)
+                    print("Teleported and following the selected player: " .. selectedPlayer.Name)
+                else
+                    print("No valid player selected.")
+                end
+
+                -- Wait for a short time before looping again
+                wait(1)  -- Adjust the wait time if necessary
+
+                -- Wait for respawn if the player dies
+                Player.CharacterAdded:Wait()
+
+                -- Optionally, add a short delay before starting the next loop
+                wait(1)
+            end
+        end)()
+    else
+        ToggleButton.Text = "Turn On"
+        print("Executor is OFF")
+    end
+end
+
+-- Function to handle showing the list
+local function showPlayerList()
+    ListBox.Visible = true
+    updatePlayerList()
+end
+
+-- Function to handle dragging
+local UserInputService = game:GetService("UserInputService")
+local function onInputBegan(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if ToggleButton:IsPointInRegion2D(input.Position) then
+            dragging = true
+            dragStart = input.Position
+            startPos = ToggleButton.Position
+        end
+    end
+end
+
+local function onInputChanged(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        local delta = input.Position - dragStart
+        ToggleButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end
+
+local function onInputEnded(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end
+
+-- Connect functions to the buttons
+ToggleButton.MouseButton1Click:Connect(toggleExecutor)
+PlayerListButton.MouseButton1Click:Connect(showPlayerList)
+UserInputService.InputBegan:Connect(onInputBegan)
+UserInputService.InputChanged:Connect(onInputChanged)
+UserInputService.InputEnded:Connect(onInputEnded)
