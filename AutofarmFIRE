@@ -124,7 +124,7 @@ local function followPlayerWithTween(targetPlayer)
     coroutine.wrap(function()
         while tweening and selectedPlayer and selectedPlayer.Character and Player.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") do
             local targetRootPart = selectedPlayer.Character.HumanoidRootPart
-            local targetPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 2  -- Stay closer to the front of the player
+            local targetPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 2  -- Stay in front of the player, closer
 
             local humanoidRootPart = Player.Character:FindFirstChild("HumanoidRootPart")
             if humanoidRootPart then
@@ -149,7 +149,7 @@ end
 local function teleportToPlayer(targetPlayer)
     if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local targetRootPart = targetPlayer.Character.HumanoidRootPart
-        local teleportPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 2 -- Teleport closer to the front of the player
+        local teleportPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 2 -- Teleport in front of the player, closer
         teleportToCoordinates(teleportPosition)
 
         -- Immediately start following the player with tween after teleporting
@@ -165,25 +165,43 @@ local function toggleExecutor()
         ToggleButton.Text = "Turn Off"  -- Update button text
         print("Executor is ON")
 
-        -- Teleport to the specific coordinates continuously for 24 seconds
-        local teleportStartTime = tick()
-        local teleportPosition = Vector3.new(236.819855, 28.944473, 84.476768)
-        
-        coroutine.wrap(function()
-            -- Teleport continuously for 24 seconds
-            while executorOn and tick() - teleportStartTime < 24 do
-                teleportToCoordinates(teleportPosition)
-                RunService.RenderStepped:Wait()  -- Use RenderStepped for more precise timing
+        -- Define a function to perform the teleportation and following logic
+        local function executeLoop()
+            local teleportPosition = Vector3.new(236.819855, 28.944473, 84.476768)
+
+            local function performActions()
+                -- Teleport continuously for 24 seconds
+                local teleportStartTime = tick()
+                coroutine.wrap(function()
+                    while executorOn and tick() - teleportStartTime < 24 do
+                        teleportToCoordinates(teleportPosition)
+                        RunService.RenderStepped:Wait()  -- Use RenderStepped for more precise timing
+                    end
+                    
+                    -- After 24 seconds, teleport to the selected player and start following
+                    if selectedPlayer then
+                        teleportToPlayer(selectedPlayer)
+                        print("Teleported and following the selected player: " .. selectedPlayer.Name)
+                    else
+                        print("No valid player selected.")
+                    end
+                end)()
             end
-            
-            -- After 24 seconds, teleport to the selected player and start following
-            if selectedPlayer then
-                teleportToPlayer(selectedPlayer)
-                print("Teleported and following the selected player: " .. selectedPlayer.Name)
-            else
-                print("No valid player selected.")
-            end
-        end)()
+
+            -- Perform the actions immediately on respawn
+            performActions()
+
+            -- Wait for the player to respawn and loop again
+            Player.CharacterAdded:Connect(function()
+                while executorOn do
+                    performActions()
+                    Player.CharacterAdded:Wait()  -- Wait for respawn
+                end
+            end)
+        end
+
+        -- Start the loop
+        executeLoop()
     else
         ToggleButton.Text = "Turn On"
         print("Executor is OFF")
@@ -209,7 +227,7 @@ local function onInputBegan(input)
 end
 
 local function onInputChanged(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
         ToggleButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
@@ -221,12 +239,9 @@ local function onInputEnded(input)
     end
 end
 
+-- Connect functions to the buttons
+ToggleButton.MouseButton1Click:Connect(toggleExecutor)
+PlayerListButton.MouseButton1Click:Connect(showPlayerList)
 UserInputService.InputBegan:Connect(onInputBegan)
 UserInputService.InputChanged:Connect(onInputChanged)
 UserInputService.InputEnded:Connect(onInputEnded)
-
--- Connect the button click event to the toggleExecutor function
-ToggleButton.MouseButton1Click:Connect(toggleExecutor)
-
--- Connect the PlayerListButton click event to show the player list
-PlayerListButton.MouseButton1Click:Connect(showPlayerList)
