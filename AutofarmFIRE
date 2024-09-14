@@ -124,7 +124,7 @@ local function followPlayerWithTween(targetPlayer)
     coroutine.wrap(function()
         while tweening and selectedPlayer and selectedPlayer.Character and Player.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") do
             local targetRootPart = selectedPlayer.Character.HumanoidRootPart
-            local targetPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 5  -- Stay in front of the player
+            local targetPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 2  -- Stay closer to the front of the player
 
             local humanoidRootPart = Player.Character:FindFirstChild("HumanoidRootPart")
             if humanoidRootPart then
@@ -149,7 +149,7 @@ end
 local function teleportToPlayer(targetPlayer)
     if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local targetRootPart = targetPlayer.Character.HumanoidRootPart
-        local teleportPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 5 -- Teleport in front of the player
+        local teleportPosition = targetRootPart.Position + targetRootPart.CFrame.LookVector * 2 -- Teleport closer to the front of the player
         teleportToCoordinates(teleportPosition)
 
         -- Immediately start following the player with tween after teleporting
@@ -165,34 +165,23 @@ local function toggleExecutor()
         ToggleButton.Text = "Turn Off"  -- Update button text
         print("Executor is ON")
 
+        -- Teleport to the specific coordinates continuously for 24 seconds
+        local teleportStartTime = tick()
+        local teleportPosition = Vector3.new(236.819855, 28.944473, 84.476768)
+        
         coroutine.wrap(function()
-            while executorOn do
-                -- Teleport to the specific coordinates continuously for 24 seconds
-                local teleportStartTime = tick()
-                local teleportPosition = Vector3.new(236.819855, 28.944473, 84.476768)
-
-                -- Teleport continuously for 24 seconds
-                while executorOn and tick() - teleportStartTime < 24 do
-                    teleportToCoordinates(teleportPosition)
-                    RunService.RenderStepped:Wait()  -- Use RenderStepped for more precise timing
-                end
-
-                -- After 24 seconds, teleport to the selected player and start following
-                if selectedPlayer then
-                    teleportToPlayer(selectedPlayer)
-                    print("Teleported and following the selected player: " .. selectedPlayer.Name)
-                else
-                    print("No valid player selected.")
-                end
-
-                -- Wait for a short time before looping again
-                wait(1)  -- Adjust the wait time if necessary
-
-                -- Wait for respawn if the player dies
-                Player.CharacterAdded:Wait()
-
-                -- Optionally, add a short delay before starting the next loop
-                wait(1)
+            -- Teleport continuously for 24 seconds
+            while executorOn and tick() - teleportStartTime < 24 do
+                teleportToCoordinates(teleportPosition)
+                RunService.RenderStepped:Wait()  -- Use RenderStepped for more precise timing
+            end
+            
+            -- After 24 seconds, teleport to the selected player and start following
+            if selectedPlayer then
+                teleportToPlayer(selectedPlayer)
+                print("Teleported and following the selected player: " .. selectedPlayer.Name)
+            else
+                print("No valid player selected.")
             end
         end)()
     else
@@ -232,9 +221,12 @@ local function onInputEnded(input)
     end
 end
 
--- Connect functions to the buttons
-ToggleButton.MouseButton1Click:Connect(toggleExecutor)
-PlayerListButton.MouseButton1Click:Connect(showPlayerList)
 UserInputService.InputBegan:Connect(onInputBegan)
 UserInputService.InputChanged:Connect(onInputChanged)
 UserInputService.InputEnded:Connect(onInputEnded)
+
+-- Connect the button click event to the toggleExecutor function
+ToggleButton.MouseButton1Click:Connect(toggleExecutor)
+
+-- Connect the PlayerListButton click event to show the player list
+PlayerListButton.MouseButton1Click:Connect(showPlayerList)
